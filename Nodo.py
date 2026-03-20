@@ -1,5 +1,6 @@
 class Nodo:
     def __init__(self, data):
         self.data = data
-        self.left: Optional['Nodo'] = None
-        self.right: Optional['Nodo'] = None
+        self.left = None
+        self.right = None
+        self.parent = None  # Referencia al padre
