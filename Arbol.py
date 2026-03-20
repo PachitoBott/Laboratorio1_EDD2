@@ -466,6 +466,54 @@ class Arbol:
 
     def find_by_satisfaction(self, satisfaction_level):
         return self.__find_by_satisfaction(self.root, satisfaction_level)
+    
+    
+    # =========================
+    # BALANCEO DEL ÁRBOL
+    # =========================
+    def rebalance(self):
+        """
+        Reconstruye el árbol de forma balanceada a partir de los nodos
+        ordenados por satisfacción (recorrido inorden).
+        """
+        if self.root is None:
+            return False
+
+        nodos_ordenados = []
+        self.__inorder_collect(self.root, nodos_ordenados)
+
+        self.root = self.__build_balanced_tree(nodos_ordenados, 0, len(nodos_ordenados) - 1, None)
+        self.all_nodes = nodos_ordenados
+        return True
+
+    def __inorder_collect(self, node, result):
+        if node is None:
+            return
+
+        left_child = node.left
+        right_child = node.right
+
+        self.__inorder_collect(left_child, result)
+
+        node.left = None
+        node.right = None
+        node.parent = None
+        result.append(node)
+
+        self.__inorder_collect(right_child, result)
+
+    def __build_balanced_tree(self, nodes, start, end, parent=None):
+        if start > end:
+            return None
+
+        mid = (start + end) // 2
+        root = nodes[mid]
+        root.parent = parent
+
+        root.left = self.__build_balanced_tree(nodes, start, mid - 1, root)
+        root.right = self.__build_balanced_tree(nodes, mid + 1, end, root)
+
+        return root
 
     # =========================
     # APOYO PARA GUI

@@ -47,7 +47,7 @@ class InterfazArbol:
         ttk.Button(panel_izquierdo, text="Buscar nodo por ID", command=self.buscar_nodo).pack(fill="x", pady=3)
         ttk.Button(panel_izquierdo, text="Mostrar recorrido por niveles", command=self.mostrar_bfs).pack(fill="x", pady=3)
         ttk.Button(panel_izquierdo, text="Mostrar información completa", command=self.mostrar_info_completa).pack(fill="x", pady=3)
-        ttk.Button(panel_izquierdo, text="Actualizar árbol", command=self._actualizar_vista_arbol).pack(fill="x", pady=3)
+        ttk.Button(panel_izquierdo, text="Balancear árbol", command=self.balancear_arbol).pack(fill="x", pady=3)
         ttk.Button(panel_izquierdo, text="Limpiar salida", command=self.limpiar_salida).pack(fill="x", pady=3)
 
         ttk.Separator(panel_izquierdo, orient="horizontal").pack(fill="x", pady=10)
@@ -199,6 +199,17 @@ class InterfazArbol:
             self._escribir("\n".join(texto))
         else:
             self._escribir("No se encontró información para ese curso.")
+    def balancear_arbol(self):
+        if self.arbol.root is None:
+            self._escribir("El árbol está vacío. No hay nada que balancear.")
+            return
+
+        ok = self.arbol.rebalance()
+        if ok:
+            self._escribir("El árbol fue balanceado correctamente.")
+            self._actualizar_vista_arbol()
+        else:
+            self._escribir("No se pudo balancear el árbol.")
 
     # ==================================================
     # Búsquedas por criterio
