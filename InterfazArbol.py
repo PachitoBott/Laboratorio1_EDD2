@@ -1,160 +1,734 @@
-
 import os
+import shutil
 import tempfile
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import messagebox
 from tkinter.scrolledtext import ScrolledText
-
 from graphviz import Digraph
 
 import Arbol
 
 
+# Asegura que Python vea Graphviz en Windows
+graphviz_bin = r"C:\Program Files\Graphviz\bin"
+if shutil.which("dot") is None and os.path.exists(graphviz_bin):
+    os.environ["PATH"] = graphviz_bin + os.pathsep + os.environ.get("PATH", "")
+
+
+class ModernButton(tk.Button):
+    def __init__(
+        self,
+        master,
+        text,
+        command,
+        bg="#3B82F6",
+        hover_bg="#2563EB",
+        fg="white",
+        active_fg="white",
+        font=("Segoe UI", 10, "bold"),
+        height=1,
+        padx=14,
+        pady=10,
+        relief="flat",
+        bd=0,
+        cursor="hand2",
+        **kwargs
+    ):
+        super().__init__(
+            master,
+            text=text,
+            command=command,
+            bg=bg,
+            fg=fg,
+            activebackground=hover_bg,
+            activeforeground=active_fg,
+            font=font,
+            relief=relief,
+            bd=bd,
+            cursor=cursor,
+            padx=padx,
+            pady=pady,
+            highlightthickness=0,
+            **kwargs
+        )
+        self.default_bg = bg
+        self.hover_bg = hover_bg
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
+
+    def _on_enter(self, _event):
+        self.configure(bg=self.hover_bg)
+
+    def _on_leave(self, _event):
+        self.configure(bg=self.default_bg)
+
+
 class InterfazArbol:
     def __init__(self, root):
         self.root = root
-        self.root.title("Laboratorio 1 - Árbol Binario de Búsqueda")
-        self.root.geometry("1200x700")
+        self.root.title("Árbol Binario de Búsqueda - Visualizador y Gestor")
+        self.root.geometry("1450x840")
+        self.root.minsize(1220, 720)
+        self.root.configure(bg="#F5F7FA")
 
         self.arbol = Arbol.Arbol()
         self.temp_dir = tempfile.mkdtemp(prefix="abb_graphviz_")
         self.tree_image = None
 
+        self.highlighted_node_id = None
+        self.selected_node_id = None
+
+        self._crear_estilos_base()
         self._crear_componentes()
         self._actualizar_vista_arbol()
 
-    def _crear_componentes(self):
-        contenedor = ttk.Frame(self.root, padding=10)
-        contenedor.pack(fill="both", expand=True)
+    # ==================================================
+    # ESTILO BASE
+    # ==================================================
+    def _crear_estilos_base(self):
+        self.colors = {
+            "bg_main": "#F5F7FA",
+            "bg_panel": "#E9EEF5",
+            "bg_card": "#FFFFFF",
+            "bg_card_alt": "#F8FAFC",
+            "text": "#1F2937",
+            "muted": "#6B7280",
+            "border": "#D7DEE8",
+            "primary": "#3B82F6",
+            "primary_hover": "#2563EB",
+            "success": "#10B981",
+            "success_hover": "#059669",
+            "danger": "#EF4444",
+            "danger_hover": "#DC2626",
+            "secondary": "#64748B",
+            "secondary_hover": "#475569",
+            "purple": "#8B5CF6",
+            "purple_hover": "#7C3AED",
+            "orange": "#F59E0B",
+            "orange_hover": "#D97706",
+            "output_bg": "#F8FAFC",
+            "ok": "#047857",
+            "error": "#B91C1C",
+            "info": "#1D4ED8",
+            "warning": "#B45309",
+        }
 
-        panel_izquierdo = ttk.Frame(contenedor)
-        panel_izquierdo.pack(side="left", fill="y", padx=(0, 10))
-
-        panel_derecho = ttk.Frame(contenedor)
-        panel_derecho.pack(side="right", fill="both", expand=True)
-
-        # -------------------------------
-        # Panel de controles
-        # -------------------------------
-        ttk.Label(panel_izquierdo, text="Operaciones", font=("Arial", 14, "bold")).pack(anchor="w", pady=(0, 10))
-
-        ttk.Label(panel_izquierdo, text="ID del curso:").pack(anchor="w")
-        self.entry_id = ttk.Entry(panel_izquierdo, width=25)
-        self.entry_id.pack(anchor="w", pady=(0, 10))
-
-        ttk.Button(panel_izquierdo, text="Insertar nodo", command=self.insertar_nodo).pack(fill="x", pady=3)
-        ttk.Button(panel_izquierdo, text="Eliminar nodo por ID", command=self.eliminar_nodo).pack(fill="x", pady=3)
-        ttk.Button(panel_izquierdo, text="Buscar nodo por ID", command=self.buscar_nodo).pack(fill="x", pady=3)
-        ttk.Button(panel_izquierdo, text="Mostrar recorrido por niveles", command=self.mostrar_bfs).pack(fill="x", pady=3)
-        ttk.Button(panel_izquierdo, text="Mostrar información completa", command=self.mostrar_info_completa).pack(fill="x", pady=3)
-        ttk.Button(panel_izquierdo, text="Balancear árbol", command=self.balancear_arbol).pack(fill="x", pady=3)
-        ttk.Button(panel_izquierdo, text="Limpiar salida", command=self.limpiar_salida).pack(fill="x", pady=3)
-
-        ttk.Separator(panel_izquierdo, orient="horizontal").pack(fill="x", pady=10)
-
-        ttk.Label(panel_izquierdo, text="Búsquedas por criterio", font=("Arial", 12, "bold")).pack(anchor="w", pady=(0, 10))
-
-        ttk.Button(
-            panel_izquierdo,
-            text="Positivas > (Negativas + Neutras)",
-            command=self.buscar_positivos_mayores
-        ).pack(fill="x", pady=3)
-
-        fecha_frame = ttk.Frame(panel_izquierdo)
-        fecha_frame.pack(fill="x", pady=3)
-        ttk.Label(fecha_frame, text="Fecha (YYYY-MM-DD):").pack(anchor="w")
-        self.entry_fecha = ttk.Entry(fecha_frame)
-        self.entry_fecha.pack(fill="x")
-
-        ttk.Button(
-            panel_izquierdo,
-            text="Buscar creados después de fecha",
-            command=self.buscar_por_fecha
-        ).pack(fill="x", pady=3)
-
-        rango_frame = ttk.Frame(panel_izquierdo)
-        rango_frame.pack(fill="x", pady=3)
-        ttk.Label(rango_frame, text="Rango de clases").pack(anchor="w")
-        self.entry_min_clases = ttk.Entry(rango_frame)
-        self.entry_min_clases.pack(fill="x", pady=1)
-        self.entry_max_clases = ttk.Entry(rango_frame)
-        self.entry_max_clases.pack(fill="x", pady=1)
-
-        ttk.Button(
-            panel_izquierdo,
-            text="Buscar por rango de clases",
-            command=self.buscar_por_rango_clases
-        ).pack(fill="x", pady=3)
-
-        ttk.Label(panel_izquierdo, text="Tipo de reseña:").pack(anchor="w", pady=(8, 0))
-        self.combo_review = ttk.Combobox(
-            panel_izquierdo,
-            state="readonly",
-            values=["positive", "negative", "neutral"]
-        )
-        self.combo_review.set("positive")
-        self.combo_review.pack(fill="x", pady=(0, 5))
-
-        ttk.Button(
-            panel_izquierdo,
-            text="Buscar reseñas sobre promedio",
-            command=self.buscar_reviews_promedio
-        ).pack(fill="x", pady=3)
-
-        # -------------------------------
-        # Panel del árbol
-        # -------------------------------
-        ttk.Label(panel_derecho, text="Visualización del árbol", font=("Arial", 14, "bold")).pack(anchor="w")
-
-        self.label_imagen = ttk.Label(panel_derecho, text="Árbol vacío")
-        self.label_imagen.pack(fill="both", expand=False, pady=10)
-
-        ttk.Label(panel_derecho, text="Salida / resultados", font=("Arial", 12, "bold")).pack(anchor="w")
-        self.txt_salida = ScrolledText(panel_derecho, height=18, wrap="word")
-        self.txt_salida.pack(fill="both", expand=True)
+        self.fonts = {
+            "title": ("Segoe UI", 22, "bold"),
+            "section": ("Segoe UI", 12, "bold"),
+            "subtitle": ("Segoe UI", 11, "bold"),
+            "text": ("Segoe UI", 10),
+            "text_small": ("Segoe UI", 9),
+            "button": ("Segoe UI", 10, "bold"),
+            "output": ("Consolas", 10),
+        }
 
     # ==================================================
-    # Operaciones básicas
+    # CONSTRUCCIÓN UI
+    # ==================================================
+    def _crear_componentes(self):
+        # Contenedor principal
+        self.main_container = tk.Frame(self.root, bg=self.colors["bg_main"])
+        self.main_container.pack(fill="both", expand=True, padx=18, pady=18)
+
+        # Header
+        self._crear_header()
+
+        # Body
+        self.body = tk.Frame(self.main_container, bg=self.colors["bg_main"])
+        self.body.pack(fill="both", expand=True, pady=(16, 0))
+
+        self.body.grid_columnconfigure(0, weight=0, minsize=360)
+        self.body.grid_columnconfigure(1, weight=1)
+        self.body.grid_rowconfigure(0, weight=1)
+        self.body.grid_rowconfigure(1, weight=0)
+
+        # Panel izquierdo
+        self.sidebar = tk.Frame(
+            self.body,
+            bg=self.colors["bg_panel"],
+            highlightbackground=self.colors["border"],
+            highlightthickness=1,
+            bd=0
+        )
+        self.sidebar.grid(row=0, column=0, sticky="nsew", padx=(0, 16), pady=(0, 12))
+
+        # Área central
+        self.center_area = tk.Frame(self.body, bg=self.colors["bg_main"])
+        self.center_area.grid(row=0, column=1, sticky="nsew", pady=(0, 12))
+        self.center_area.grid_rowconfigure(1, weight=1)
+        self.center_area.grid_columnconfigure(0, weight=1)
+
+        # Salida inferior
+        self.bottom_area = tk.Frame(
+            self.body,
+            bg=self.colors["bg_card"],
+            highlightbackground=self.colors["border"],
+            highlightthickness=1
+        )
+        self.bottom_area.grid(row=1, column=0, columnspan=2, sticky="nsew")
+
+        self._crear_sidebar()
+        self._crear_visualizacion()
+        self._crear_salida()
+
+    def _crear_header(self):
+        header = tk.Frame(
+            self.main_container,
+            bg=self.colors["bg_card"],
+            highlightbackground=self.colors["border"],
+            highlightthickness=1
+        )
+        header.pack(fill="x")
+
+        title_frame = tk.Frame(header, bg=self.colors["bg_card"])
+        title_frame.pack(fill="x", padx=20, pady=16)
+
+        tk.Label(
+            title_frame,
+            text="Árbol Binario de Búsqueda",
+            font=self.fonts["title"],
+            fg=self.colors["text"],
+            bg=self.colors["bg_card"]
+        ).pack(anchor="w")
+
+        tk.Label(
+            title_frame,
+            text="Visualizador y gestor interactivo de cursos basado en nivel de satisfacción",
+            font=self.fonts["text"],
+            fg=self.colors["muted"],
+            bg=self.colors["bg_card"]
+        ).pack(anchor="w", pady=(4, 0))
+
+    def _crear_sidebar(self):
+        # Canvas + scroll del panel lateral
+        sidebar_canvas = tk.Canvas(
+            self.sidebar,
+            bg=self.colors["bg_panel"],
+            highlightthickness=0,
+            bd=0
+        )
+        sidebar_scroll = tk.Scrollbar(self.sidebar, orient="vertical", command=sidebar_canvas.yview)
+        self.sidebar_content = tk.Frame(sidebar_canvas, bg=self.colors["bg_panel"])
+
+        self.sidebar_content.bind(
+            "<Configure>",
+            lambda e: sidebar_canvas.configure(scrollregion=sidebar_canvas.bbox("all"))
+        )
+
+        sidebar_canvas.create_window((0, 0), window=self.sidebar_content, anchor="nw")
+        sidebar_canvas.configure(yscrollcommand=sidebar_scroll.set)
+
+        sidebar_canvas.pack(side="left", fill="both", expand=True)
+        sidebar_scroll.pack(side="right", fill="y")
+
+        # Título lateral
+        tk.Label(
+            self.sidebar_content,
+            text="Panel de control",
+            font=("Segoe UI", 15, "bold"),
+            fg=self.colors["text"],
+            bg=self.colors["bg_panel"]
+        ).pack(anchor="w", padx=16, pady=(16, 4))
+
+        tk.Label(
+            self.sidebar_content,
+            text="Gestiona el árbol, ejecuta búsquedas y consulta resultados.",
+            font=self.fonts["text_small"],
+            fg=self.colors["muted"],
+            bg=self.colors["bg_panel"],
+            justify="left"
+        ).pack(anchor="w", padx=16, pady=(0, 14))
+
+        # Tarjeta: Operaciones
+        ops_card = self._crear_card(self.sidebar_content, "Operaciones del árbol")
+        self._crear_operaciones_card(ops_card)
+
+        # Tarjeta: Búsquedas
+        search_card = self._crear_card(self.sidebar_content, "Búsquedas por criterio")
+        self._crear_busquedas_card(search_card)
+
+        # Tarjeta: Estado
+        state_card = self._crear_card(self.sidebar_content, "Estado / ayuda visual")
+        self._crear_estado_card(state_card)
+
+    def _crear_operaciones_card(self, parent):
+        tk.Label(
+            parent,
+            text="ID del curso",
+            font=self.fonts["subtitle"],
+            fg=self.colors["text"],
+            bg=self.colors["bg_card"]
+        ).pack(anchor="w", padx=16, pady=(16, 6))
+
+        self.entry_id = tk.Entry(
+            parent,
+            font=self.fonts["text"],
+            bg="white",
+            fg=self.colors["text"],
+            insertbackground=self.colors["text"],
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=self.colors["border"],
+            highlightcolor=self.colors["primary"],
+            bd=0
+        )
+        self.entry_id.pack(fill="x", padx=16, pady=(0, 14), ipady=9)
+
+        btn_container = tk.Frame(parent, bg=self.colors["bg_card"])
+        btn_container.pack(fill="x", padx=16, pady=(0, 14))
+
+        ModernButton(
+            btn_container,
+            text="Insertar nodo",
+            command=self.insertar_nodo,
+            bg=self.colors["success"],
+            hover_bg=self.colors["success_hover"],
+            font=self.fonts["button"]
+        ).pack(fill="x", pady=4)
+
+        ModernButton(
+            btn_container,
+            text="Eliminar nodo por ID",
+            command=self.eliminar_nodo,
+            bg=self.colors["danger"],
+            hover_bg=self.colors["danger_hover"],
+            font=self.fonts["button"]
+        ).pack(fill="x", pady=4)
+
+        ModernButton(
+            btn_container,
+            text="Buscar nodo por ID",
+            command=self.buscar_nodo,
+            bg=self.colors["primary"],
+            hover_bg=self.colors["primary_hover"],
+            font=self.fonts["button"]
+        ).pack(fill="x", pady=4)
+
+        ModernButton(
+            btn_container,
+            text="Mostrar recorrido por niveles",
+            command=self.mostrar_bfs,
+            bg=self.colors["secondary"],
+            hover_bg=self.colors["secondary_hover"],
+            font=self.fonts["button"]
+        ).pack(fill="x", pady=4)
+
+        ModernButton(
+            btn_container,
+            text="Mostrar información completa",
+            command=self.mostrar_info_completa,
+            bg=self.colors["purple"],
+            hover_bg=self.colors["purple_hover"],
+            font=self.fonts["button"]
+        ).pack(fill="x", pady=4)
+
+        ModernButton(
+            btn_container,
+            text="Balancear árbol",
+            command=self.balancear_arbol,
+            bg=self.colors["orange"],
+            hover_bg=self.colors["orange_hover"],
+            font=self.fonts["button"]
+        ).pack(fill="x", pady=(8, 4))
+
+        ModernButton(
+            btn_container,
+            text="Refrescar visualización",
+            command=self._actualizar_vista_arbol,
+            bg="#94A3B8",
+            hover_bg="#64748B",
+            font=self.fonts["button"]
+        ).pack(fill="x", pady=4)
+
+        ModernButton(
+            btn_container,
+            text="Limpiar salida",
+            command=self.limpiar_salida,
+            bg="#CBD5E1",
+            hover_bg="#94A3B8",
+            fg="#1F2937",
+            active_fg="white",
+            font=self.fonts["button"]
+        ).pack(fill="x", pady=4)
+
+    def _crear_busquedas_card(self, parent):
+        content = tk.Frame(parent, bg=self.colors["bg_card"])
+        content.pack(fill="x", padx=16, pady=(14, 16))
+
+        ModernButton(
+            content,
+            text="Positivas > (Negativas + Neutras)",
+            command=self.buscar_positivos_mayores,
+            bg=self.colors["primary"],
+            hover_bg=self.colors["primary_hover"],
+            font=self.fonts["button"]
+        ).pack(fill="x", pady=(0, 10))
+
+        # Fecha
+        tk.Label(
+            content,
+            text="Fecha de creación (YYYY-MM-DD)",
+            font=self.fonts["subtitle"],
+            fg=self.colors["text"],
+            bg=self.colors["bg_card"]
+        ).pack(anchor="w", pady=(0, 6))
+
+        self.entry_fecha = tk.Entry(
+            content,
+            font=self.fonts["text"],
+            bg="white",
+            fg=self.colors["text"],
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=self.colors["border"],
+            highlightcolor=self.colors["primary"],
+            bd=0
+        )
+        self.entry_fecha.pack(fill="x", ipady=8, pady=(0, 8))
+
+        ModernButton(
+            content,
+            text="Buscar creados después de fecha",
+            command=self.buscar_por_fecha,
+            bg=self.colors["secondary"],
+            hover_bg=self.colors["secondary_hover"],
+            font=self.fonts["button"]
+        ).pack(fill="x", pady=(0, 12))
+
+        # Rango clases
+        tk.Label(
+            content,
+            text="Rango de clases",
+            font=self.fonts["subtitle"],
+            fg=self.colors["text"],
+            bg=self.colors["bg_card"]
+        ).pack(anchor="w", pady=(0, 6))
+
+        range_row = tk.Frame(content, bg=self.colors["bg_card"])
+        range_row.pack(fill="x", pady=(0, 8))
+
+        self.entry_min_clases = tk.Entry(
+            range_row,
+            font=self.fonts["text"],
+            bg="white",
+            fg=self.colors["text"],
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=self.colors["border"],
+            highlightcolor=self.colors["primary"],
+            bd=0
+        )
+        self.entry_min_clases.pack(side="left", fill="x", expand=True, ipady=8, padx=(0, 6))
+
+        self.entry_max_clases = tk.Entry(
+            range_row,
+            font=self.fonts["text"],
+            bg="white",
+            fg=self.colors["text"],
+            relief="flat",
+            highlightthickness=1,
+            highlightbackground=self.colors["border"],
+            highlightcolor=self.colors["primary"],
+            bd=0
+        )
+        self.entry_max_clases.pack(side="left", fill="x", expand=True, ipady=8, padx=(6, 0))
+
+        ModernButton(
+            content,
+            text="Buscar por rango de clases",
+            command=self.buscar_por_rango_clases,
+            bg=self.colors["secondary"],
+            hover_bg=self.colors["secondary_hover"],
+            font=self.fonts["button"]
+        ).pack(fill="x", pady=(0, 12))
+
+        tk.Label(
+            content,
+            text="Tipo de reseña",
+            font=self.fonts["subtitle"],
+            fg=self.colors["text"],
+            bg=self.colors["bg_card"]
+        ).pack(anchor="w", pady=(0, 6))
+
+        self.combo_review = tk.StringVar(value="positive")
+        combo_frame = tk.Frame(
+            content,
+            bg="white",
+            highlightbackground=self.colors["border"],
+            highlightthickness=1
+        )
+        combo_frame.pack(fill="x", pady=(0, 8))
+
+        self.review_menu = tk.OptionMenu(
+            combo_frame,
+            self.combo_review,
+            "positive",
+            "negative",
+            "neutral"
+        )
+        self.review_menu.config(
+            font=self.fonts["text"],
+            bg="white",
+            fg=self.colors["text"],
+            activebackground=self.colors["bg_card_alt"],
+            activeforeground=self.colors["text"],
+            relief="flat",
+            bd=0,
+            highlightthickness=0
+        )
+        self.review_menu["menu"].config(
+            font=self.fonts["text"],
+            bg="white",
+            fg=self.colors["text"],
+            activebackground=self.colors["bg_card_alt"],
+            activeforeground=self.colors["text"]
+        )
+        self.review_menu.pack(fill="x")
+
+        ModernButton(
+            content,
+            text="Buscar reseñas sobre promedio",
+            command=self.buscar_reviews_promedio,
+            bg=self.colors["purple"],
+            hover_bg=self.colors["purple_hover"],
+            font=self.fonts["button"]
+        ).pack(fill="x")
+
+    def _crear_estado_card(self, parent):
+        content = tk.Frame(parent, bg=self.colors["bg_card"])
+        content.pack(fill="x", padx=16, pady=(14, 16))
+
+        legend_items = [
+            ("Nodo raíz", "#93C5FD"),
+            ("Nodo normal", "#BFDBFE"),
+            ("Nodo encontrado / seleccionado", "#FDE68A"),
+            ("Nodo desbalanceado", "#FCA5A5"),
+            ("Acción importante", "#F59E0B"),
+        ]
+
+        tk.Label(
+            content,
+            text="Referencia visual",
+            font=self.fonts["subtitle"],
+            fg=self.colors["text"],
+            bg=self.colors["bg_card"]
+        ).pack(anchor="w", pady=(0, 8))
+
+        for text, color in legend_items:
+            row = tk.Frame(content, bg=self.colors["bg_card"])
+            row.pack(fill="x", pady=3)
+
+            sample = tk.Canvas(row, width=18, height=18, bg=self.colors["bg_card"], highlightthickness=0)
+            sample.pack(side="left")
+            sample.create_oval(2, 2, 16, 16, fill=color, outline="#64748B", width=1)
+
+            tk.Label(
+                row,
+                text=text,
+                font=self.fonts["text"],
+                fg=self.colors["text"],
+                bg=self.colors["bg_card"]
+            ).pack(side="left", padx=8)
+
+        tk.Label(
+            content,
+            text="Tip: usa “Balancear árbol” cuando el árbol crezca mucho hacia un lado.",
+            font=self.fonts["text_small"],
+            fg=self.colors["muted"],
+            bg=self.colors["bg_card"],
+            justify="left",
+            wraplength=280
+        ).pack(anchor="w", pady=(12, 0))
+
+    def _crear_visualizacion(self):
+        # Título de visualización
+        vis_header = tk.Frame(self.center_area, bg=self.colors["bg_main"])
+        vis_header.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+
+        tk.Label(
+            vis_header,
+            text="Visualización del árbol",
+            font=("Segoe UI", 16, "bold"),
+            fg=self.colors["text"],
+            bg=self.colors["bg_main"]
+        ).pack(side="left")
+
+        tk.Label(
+            vis_header,
+            text="Vista generada con Graphviz",
+            font=self.fonts["text_small"],
+            fg=self.colors["muted"],
+            bg=self.colors["bg_main"]
+        ).pack(side="left", padx=12, pady=(4, 0))
+
+        # Tarjeta de visualización
+        visual_card = tk.Frame(
+            self.center_area,
+            bg=self.colors["bg_card"],
+            highlightbackground=self.colors["border"],
+            highlightthickness=1
+        )
+        visual_card.grid(row=1, column=0, sticky="nsew")
+        visual_card.grid_rowconfigure(1, weight=1)
+        visual_card.grid_columnconfigure(0, weight=1)
+
+        card_top = tk.Frame(visual_card, bg=self.colors["bg_card"])
+        card_top.grid(row=0, column=0, sticky="ew", padx=16, pady=(14, 8))
+
+        self.tree_status_label = tk.Label(
+            card_top,
+            text="Árbol listo para visualizar",
+            font=self.fonts["text"],
+            fg=self.colors["muted"],
+            bg=self.colors["bg_card"]
+        )
+        self.tree_status_label.pack(anchor="w")
+
+        # Canvas con scroll
+        tree_frame = tk.Frame(visual_card, bg=self.colors["bg_card_alt"])
+        tree_frame.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 16))
+
+        self.tree_canvas = tk.Canvas(
+            tree_frame,
+            bg="#FCFDFE",
+            highlightbackground=self.colors["border"],
+            highlightthickness=1,
+            bd=0
+        )
+        self.tree_canvas.pack(side="left", fill="both", expand=True)
+
+        y_scroll = tk.Scrollbar(tree_frame, orient="vertical", command=self.tree_canvas.yview)
+        y_scroll.pack(side="right", fill="y")
+
+        x_scroll = tk.Scrollbar(visual_card, orient="horizontal", command=self.tree_canvas.xview)
+        x_scroll.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 14))
+
+        self.tree_canvas.configure(
+            yscrollcommand=y_scroll.set,
+            xscrollcommand=x_scroll.set
+        )
+
+        self.tree_canvas.bind("<Configure>", self._centrar_imagen_arbol)
+
+    def _crear_salida(self):
+        top = tk.Frame(self.bottom_area, bg=self.colors["bg_card"])
+        top.pack(fill="x", padx=18, pady=(14, 8))
+
+        tk.Label(
+            top,
+            text="Salida / resultados",
+            font=("Segoe UI", 14, "bold"),
+            fg=self.colors["text"],
+            bg=self.colors["bg_card"]
+        ).pack(side="left")
+
+        tk.Label(
+            top,
+            text="Mensajes del sistema, búsquedas y operaciones ejecutadas",
+            font=self.fonts["text_small"],
+            fg=self.colors["muted"],
+            bg=self.colors["bg_card"]
+        ).pack(side="left", padx=12, pady=(3, 0))
+
+        self.txt_salida = ScrolledText(
+            self.bottom_area,
+            height=11,
+            wrap="word",
+            font=self.fonts["output"],
+            bg=self.colors["output_bg"],
+            fg=self.colors["text"],
+            relief="flat",
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=self.colors["border"],
+            insertbackground=self.colors["text"],
+            padx=14,
+            pady=12
+        )
+        self.txt_salida.pack(fill="both", expand=True, padx=18, pady=(0, 18))
+
+        self.txt_salida.tag_configure("ok", foreground=self.colors["ok"])
+        self.txt_salida.tag_configure("error", foreground=self.colors["error"])
+        self.txt_salida.tag_configure("info", foreground=self.colors["info"])
+        self.txt_salida.tag_configure("warning", foreground=self.colors["warning"])
+        self.txt_salida.tag_configure("divider", foreground="#94A3B8")
+
+    def _crear_card(self, parent, title):
+        wrapper = tk.Frame(
+            parent,
+            bg=self.colors["bg_card"],
+            highlightbackground=self.colors["border"],
+            highlightthickness=1
+        )
+        wrapper.pack(fill="x", padx=16, pady=(0, 14))
+
+        title_bar = tk.Frame(wrapper, bg=self.colors["bg_card"])
+        title_bar.pack(fill="x", padx=16, pady=(14, 0))
+
+        tk.Label(
+            title_bar,
+            text=title,
+            font=self.fonts["section"],
+            fg=self.colors["text"],
+            bg=self.colors["bg_card"]
+        ).pack(anchor="w")
+
+        return wrapper
+
+    # ==================================================
+    # OPERACIONES BÁSICAS
     # ==================================================
     def insertar_nodo(self):
         try:
             course_id = int(self.entry_id.get().strip())
         except ValueError:
             messagebox.showerror("Error", "El ID debe ser un número entero.")
+            self._escribir("[ERROR] El ID debe ser un número entero.", "error")
             return
 
         ok = self.arbol.insert(course_id)
         if ok:
-            self._escribir(f"Se insertó el curso con ID {course_id}.")
+            self.highlighted_node_id = course_id
+            self.selected_node_id = course_id
+            self._escribir(f"[OK] Se insertó el curso con ID {course_id}.", "ok")
             self._actualizar_vista_arbol()
         else:
-            self._escribir(f"No se pudo insertar el curso con ID {course_id}.")
+            self._escribir(f"[ERROR] No se pudo insertar el curso con ID {course_id}.", "error")
 
     def eliminar_nodo(self):
         try:
             course_id = int(self.entry_id.get().strip())
         except ValueError:
             messagebox.showerror("Error", "El ID debe ser un número entero.")
+            self._escribir("[ERROR] El ID debe ser un número entero.", "error")
             return
 
         ok = self.arbol.delete_by_id(course_id)
         if ok:
-            self._escribir(f"Se eliminó el curso con ID {course_id}.")
+            if self.highlighted_node_id == course_id:
+                self.highlighted_node_id = None
+            if self.selected_node_id == course_id:
+                self.selected_node_id = None
+            self._escribir(f"[OK] Se eliminó el curso con ID {course_id}.", "ok")
             self._actualizar_vista_arbol()
         else:
-            self._escribir(f"No se encontró el curso con ID {course_id} para eliminar.")
+            self._escribir(f"[ERROR] No se encontró el curso con ID {course_id} para eliminar.", "error")
 
     def buscar_nodo(self):
         try:
             course_id = int(self.entry_id.get().strip())
         except ValueError:
             messagebox.showerror("Error", "El ID debe ser un número entero.")
+            self._escribir("[ERROR] El ID debe ser un número entero.", "error")
             return
 
         node = self.arbol.find(course_id)
         if node:
+            self.highlighted_node_id = course_id
+            self.selected_node_id = course_id
             salida = [
-                "Nodo encontrado:",
+                "[INFO] Nodo encontrado:",
                 f"ID: {node.data[0]}",
                 f"Satisfacción: {node.data[1]:.4f}",
                 f"Nivel: {self.arbol.get_node_level(node)}",
@@ -169,50 +743,61 @@ class InterfazArbol:
             salida.append(f"Abuelo: {abuelo.data[0] if abuelo else 'No tiene'}")
             salida.append(f"Tío: {tio.data[0] if tio else 'No tiene'}")
 
-            self._escribir("\n".join(salida))
+            self._escribir("\n".join(salida), "info")
+            self._actualizar_vista_arbol()
         else:
-            self._escribir("Nodo no encontrado.")
+            self.highlighted_node_id = None
+            self._escribir("[ERROR] Nodo no encontrado.", "error")
+            self._actualizar_vista_arbol()
 
     def mostrar_bfs(self):
         niveles = self.arbol.level_order_traversal()
         if not niveles:
-            self._escribir("El árbol está vacío.")
+            self._escribir("[INFO] El árbol está vacío.", "info")
             return
 
-        texto = ["Recorrido por niveles:"]
+        texto = ["[INFO] Recorrido por niveles:"]
         for i, nivel in enumerate(niveles):
             texto.append(f"Nivel {i}: {nivel}")
-        self._escribir("\n".join(texto))
+        self._escribir("\n".join(texto), "info")
 
     def mostrar_info_completa(self):
         try:
             course_id = int(self.entry_id.get().strip())
         except ValueError:
             messagebox.showerror("Error", "El ID debe ser un número entero.")
+            self._escribir("[ERROR] El ID debe ser un número entero.", "error")
             return
 
         info = self.arbol.get_course_full_info(course_id)
         if info:
-            texto = ["Información completa del curso:"]
+            self.highlighted_node_id = course_id
+            self.selected_node_id = course_id
+            texto = ["[INFO] Información completa del curso:"]
             for k, v in info.items():
                 texto.append(f"{k}: {v}")
-            self._escribir("\n".join(texto))
-        else:
-            self._escribir("No se encontró información para ese curso.")
-    def balancear_arbol(self):
-        if self.arbol.root is None:
-            self._escribir("El árbol está vacío. No hay nada que balancear.")
-            return
-
-        ok = self.arbol.rebalance()
-        if ok:
-            self._escribir("El árbol fue balanceado correctamente.")
+            self._escribir("\n".join(texto), "info")
             self._actualizar_vista_arbol()
         else:
-            self._escribir("No se pudo balancear el árbol.")
+            self._escribir("[ERROR] No se encontró información para ese curso.", "error")
+
+    def balancear_arbol(self):
+        if self.arbol.root is None:
+            self._escribir("[INFO] El árbol está vacío. No hay nada que balancear.", "info")
+            return
+
+        if hasattr(self.arbol, "rebalance"):
+            ok = self.arbol.rebalance()
+            if ok:
+                self._escribir("[OK] El árbol fue balanceado correctamente.", "ok")
+                self._actualizar_vista_arbol()
+            else:
+                self._escribir("[ERROR] No se pudo balancear el árbol.", "error")
+        else:
+            self._escribir("[ERROR] El método rebalance() no existe en Arbol.py.", "error")
 
     # ==================================================
-    # Búsquedas por criterio
+    # BÚSQUEDAS POR CRITERIO
     # ==================================================
     def buscar_positivos_mayores(self):
         resultados = self.arbol.search_by_positive_reviews_criterion()
@@ -225,6 +810,7 @@ class InterfazArbol:
             self._mostrar_lista_nodos(f"Cursos creados después de {fecha}", resultados)
         except ValueError:
             messagebox.showerror("Error", "La fecha debe tener formato YYYY-MM-DD.")
+            self._escribir("[ERROR] La fecha debe tener formato YYYY-MM-DD.", "error")
 
     def buscar_por_rango_clases(self):
         try:
@@ -232,6 +818,7 @@ class InterfazArbol:
             maximo = int(self.entry_max_clases.get().strip())
         except ValueError:
             messagebox.showerror("Error", "Los valores del rango deben ser enteros.")
+            self._escribir("[ERROR] Los valores del rango deben ser enteros.", "error")
             return
 
         resultados = self.arbol.search_by_classes_range(minimo, maximo)
@@ -249,78 +836,170 @@ class InterfazArbol:
         )
 
     # ==================================================
-    # Utilidades de salida
+    # UTILIDADES DE SALIDA
     # ==================================================
     def _mostrar_lista_nodos(self, titulo, resultados):
         if not resultados:
-            self._escribir(f"{titulo}\nNo se encontraron nodos.")
+            self._escribir(f"[INFO] {titulo}\nNo se encontraron nodos.", "info")
             return
 
-        lineas = [titulo, f"Total encontrados: {len(resultados)}"]
+        self.highlighted_node_id = resultados[0].data[0] if resultados else None
+
+        lineas = [f"[INFO] {titulo}", f"Total encontrados: {len(resultados)}"]
         for i, node in enumerate(resultados, start=1):
             lineas.append(f"{i}. ID: {node.data[0]} | Satisfacción: {node.data[1]:.4f}")
-        self._escribir("\n".join(lineas))
 
-    def _escribir(self, texto):
-        self.txt_salida.insert("end", texto + "\n" + ("-" * 60) + "\n")
+        self._escribir("\n".join(lineas), "info")
+        self._actualizar_vista_arbol()
+
+    def _escribir(self, texto, tipo="info"):
+        self.txt_salida.insert("end", texto + "\n", tipo)
+        self.txt_salida.insert("end", "─" * 72 + "\n", "divider")
         self.txt_salida.see("end")
 
     def limpiar_salida(self):
         self.txt_salida.delete("1.0", "end")
+        self._escribir("[INFO] Salida limpiada.", "info")
 
     # ==================================================
-    # Graphviz
+    # VISUALIZACIÓN GRAPHVIZ
     # ==================================================
     def _actualizar_vista_arbol(self):
         if self.arbol.root is None:
-            self.label_imagen.configure(text="Árbol vacío", image="")
-            self.tree_image = None
+            self.tree_canvas.delete("all")
+            self.tree_canvas.create_text(
+                400, 220,
+                text="Árbol vacío",
+                fill=self.colors["muted"],
+                font=("Segoe UI", 18, "bold")
+            )
+            self.tree_canvas.configure(scrollregion=(0, 0, 800, 440))
+            self.tree_status_label.configure(text="No hay nodos cargados actualmente.")
             return
 
         try:
             ruta_png = self._generar_imagen_graphviz()
             self.tree_image = tk.PhotoImage(file=ruta_png)
-            self.label_imagen.configure(image=self.tree_image, text="")
-        except Exception as e:
-            self.label_imagen.configure(
-                text=f"No se pudo generar la imagen del árbol.\n{str(e)}",
-                image=""
+
+            self.tree_canvas.delete("all")
+            self.tree_canvas.create_image(0, 0, image=self.tree_image, anchor="nw", tags="tree_img")
+
+            width = self.tree_image.width()
+            height = self.tree_image.height()
+            self.tree_canvas.configure(scrollregion=(0, 0, width + 40, height + 40))
+            self._centrar_imagen_arbol()
+
+            total_nodes = len(self.arbol.all_nodes) if hasattr(self.arbol, "all_nodes") else "?"
+            self.tree_status_label.configure(
+                text=f"Árbol generado correctamente. Nodos cargados: {total_nodes}"
             )
-            self.tree_image = None
+        except Exception as e:
+            self.tree_canvas.delete("all")
+            self.tree_canvas.create_text(
+                450, 220,
+                text=f"No se pudo generar la imagen del árbol.\n{str(e)}",
+                fill=self.colors["error"],
+                font=("Segoe UI", 12, "bold"),
+                justify="center"
+            )
+            self.tree_canvas.configure(scrollregion=(0, 0, 900, 440))
+            self.tree_status_label.configure(text="Error al generar la visualización.")
+
+    def _centrar_imagen_arbol(self, _event=None):
+        if self.tree_image is None:
+            return
+
+        canvas_w = self.tree_canvas.winfo_width()
+        canvas_h = self.tree_canvas.winfo_height()
+        img_w = self.tree_image.width()
+        img_h = self.tree_image.height()
+
+        x = max((canvas_w - img_w) // 2, 20)
+        y = 20
+
+        self.tree_canvas.delete("tree_img")
+        self.tree_canvas.create_image(x, y, image=self.tree_image, anchor="nw", tags="tree_img")
+        self.tree_canvas.configure(scrollregion=(0, 0, max(canvas_w, img_w + 40), max(canvas_h, img_h + 40)))
 
     def _generar_imagen_graphviz(self):
         dot = Digraph(comment="Árbol Binario de Búsqueda")
-        dot.attr(rankdir='TB')
-        dot.attr('node', shape='circle', style='filled', fillcolor='lightblue', fontname='Arial')
+        dot.attr(rankdir='TB', splines='true', nodesep='0.55', ranksep='0.7')
+        dot.attr(bgcolor="transparent")
 
-        self._agregar_nodos_y_aristas(dot, self.arbol.root)
+        self._agregar_nodos_y_aristas(dot, self.arbol.root, is_root=True)
 
         archivo_base = os.path.join(self.temp_dir, "arbol_actual")
         ruta_generada = dot.render(filename=archivo_base, format='png', cleanup=True)
         return ruta_generada
 
-    def _agregar_nodos_y_aristas(self, dot, nodo):
+    def _agregar_nodos_y_aristas(self, dot, nodo, is_root=False):
         if nodo is None:
             return
 
         nombre_nodo = f"node_{id(nodo)}"
+        node_id = nodo.data[0]
+        balance = self.arbol.get_balance_factor(nodo)
+
+        # Colores por estado
+        fill = "#BFDBFE"          # normal
+        border = "#5B7C99"
+        font_color = "#1F2937"
+        penwidth = "1.5"
+
+        if is_root:
+            fill = "#93C5FD"      # raíz
+            border = "#2563EB"
+            penwidth = "2.0"
+
+        if abs(balance) > 1:
+            fill = "#FCA5A5"      # desbalanceado
+            border = "#DC2626"
+
+        if self.highlighted_node_id == node_id or self.selected_node_id == node_id:
+            fill = "#FDE68A"      # encontrado / seleccionado
+            border = "#D97706"
+            penwidth = "2.3"
+
         etiqueta = f"ID: {nodo.data[0]}\\nSat: {nodo.data[1]:.2f}"
-        dot.node(nombre_nodo, etiqueta)
+
+        dot.node(
+            nombre_nodo,
+            etiqueta,
+            shape="circle",
+            style="filled",
+            fillcolor=fill,
+            color=border,
+            fontcolor=font_color,
+            fontname="Segoe UI",
+            fontsize="11",
+            penwidth=penwidth,
+            margin="0.12"
+        )
 
         if nodo.left:
             nombre_izq = f"node_{id(nodo.left)}"
-            self._agregar_nodos_y_aristas(dot, nodo.left)
-            dot.edge(nombre_nodo, nombre_izq)
+            self._agregar_nodos_y_aristas(dot, nodo.left, is_root=False)
+            dot.edge(
+                nombre_nodo,
+                nombre_izq,
+                color="#94A3B8",
+                penwidth="1.4"
+            )
         else:
             null_izq = f"null_left_{id(nodo)}"
-            dot.node(null_izq, "", shape="point")
-            dot.edge(nombre_nodo, null_izq)
+            dot.node(null_izq, "", shape="point", width="0.08", color="#CBD5E1")
+            dot.edge(nombre_nodo, null_izq, color="#E2E8F0", style="dashed")
 
         if nodo.right:
             nombre_der = f"node_{id(nodo.right)}"
-            self._agregar_nodos_y_aristas(dot, nodo.right)
-            dot.edge(nombre_nodo, nombre_der)
+            self._agregar_nodos_y_aristas(dot, nodo.right, is_root=False)
+            dot.edge(
+                nombre_nodo,
+                nombre_der,
+                color="#94A3B8",
+                penwidth="1.4"
+            )
         else:
             null_der = f"null_right_{id(nodo)}"
-            dot.node(null_der, "", shape="point")
-            dot.edge(nombre_nodo, null_der)
+            dot.node(null_der, "", shape="point", width="0.08", color="#CBD5E1")
+            dot.edge(nombre_nodo, null_der, color="#E2E8F0", style="dashed")
