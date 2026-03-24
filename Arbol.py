@@ -1,8 +1,11 @@
 import csv
+import os
 from datetime import datetime
-from collections import deque
-from platform import node
+# deque ya no es necesario: BFS implementado recursivamente
 import Nodo
+
+# Ruta absoluta al CSV, funciona sin importar el directorio de trabajo
+_CSV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'dataset_courses_with_reviews.csv')
 
 class Arbol:
     def __init__(self, root=None):
@@ -38,7 +41,7 @@ class Arbol:
     # DATOS DEL CSV
     # =========================
     def get_course_data(self, course_id):
-        csv_path = 'dataset_courses_with_reviews.csv'
+        csv_path = _CSV_PATH
         with open(csv_path, mode='r', encoding='utf-8') as file:
             reader = csv.DictReader(file)
             for row in reader:
@@ -90,6 +93,7 @@ class Arbol:
         else:
             self.__insert_recursively(self.root, new_node)
             self.all_nodes.append(new_node)
+            self.rebalance()  # Auto-balanceo trucho
             return True
 
     def __insert_recursively(self, current_node, new_node):
@@ -198,6 +202,7 @@ class Arbol:
 
         if deleted:
             self.all_nodes = [n for n in self.all_nodes if n.data[0] != course_id]
+            self.rebalance()  # Auto-balanceo trucho
             print(f"Nodo con ID {course_id} eliminado.")
             return True
 
@@ -254,7 +259,7 @@ class Arbol:
         return results
 
     def __date_criterion(self, course_id, target_date):
-        csv_path = 'dataset_courses_with_reviews.csv'
+        csv_path = _CSV_PATH
         with open(csv_path, mode='r', encoding='utf-8') as file:
             reader = csv.DictReader(file)
             for row in reader:
@@ -273,7 +278,7 @@ class Arbol:
         return results
 
     def __classes_range_criterion(self, course_id, min_val, max_val):
-        csv_path = 'dataset_courses_with_reviews.csv'
+        csv_path = _CSV_PATH
         with open(csv_path, mode='r', encoding='utf-8') as file:
             reader = csv.DictReader(file)
             for row in reader:
@@ -334,46 +339,46 @@ class Arbol:
         self.__search_criterion_recursive(node.right, results, criterion)
 
     # =========================
-    # BFS
+    # BFS RECURSIVO
     # =========================
     def level_order_traversal(self):
         if self.root is None:
             print("El árbol está vacío.")
             return []
 
-        result = []
-        queue = deque([(self.root, 0)])
-        current_level = 0
-        level_nodes = []
+        levels = []
+        self.__bfs_recursive([self.root], levels)
 
-        while queue:
-            node, level = queue.popleft()
+        for i, level in enumerate(levels):
+            print(f"Nivel {i}: {[n for n in level]}")
 
-            if level > current_level:
-                result.append(level_nodes)
-                level_nodes = []
-                current_level = level
+        return levels
 
-            level_nodes.append(node.data[0])
+    def __bfs_recursive(self, current_level_nodes, levels):
+        """Recorre el árbol por niveles de forma recursiva.
+        current_level_nodes: lista de nodos del nivel actual.
+        levels: lista acumuladora donde se añaden los IDs por nivel.
+        """
+        if not current_level_nodes:
+            return
 
+        ids_nivel = [node.data[0] for node in current_level_nodes]
+        levels.append(ids_nivel)
+
+        siguiente_nivel = []
+        for node in current_level_nodes:
             if node.left:
-                queue.append((node.left, level + 1))
+                siguiente_nivel.append(node.left)
             if node.right:
-                queue.append((node.right, level + 1))
+                siguiente_nivel.append(node.right)
 
-        if level_nodes:
-            result.append(level_nodes)
-
-        for i, level in enumerate(result):
-            print(f"Nivel {i}: {level}")
-
-        return result
+        self.__bfs_recursive(siguiente_nivel, levels)
 
     # =========================
     # OPERACIONES SOBRE NODOS
     # =========================
     def get_course_full_info(self, course_id):
-        csv_path = 'dataset_courses_with_reviews.csv'
+        csv_path = _CSV_PATH
         with open(csv_path, mode='r', encoding='utf-8') as file:
             reader = csv.DictReader(file)
             for row in reader:
@@ -420,26 +425,78 @@ class Arbol:
         return 1 + max(self.__get_height(node.left), self.__get_height(node.right))
 
     def get_parent(self, node):
-        if node is None:
+        """Encuentra el padre del nodo de manera recursiva desde la raíz."""
+        if node is None or node is self.root:
             return None
-        return node.parent
+        return self.__find_parent_recursive(self.root, node)
+
+    def __find_parent_recursive(self, current, target):
+        if current is None:
+            return None
+        if current.left is target or current.right is target:
+            return current
+        left_result = self.__find_parent_recursive(current.left, target)
+        if left_result:
+            return left_result
+        return self.__find_parent_recursive(current.right, target)
 
     def get_grandparent(self, node):
-        if node is None or node.parent is None:
+        """Encuentra el abuelo del nodo de manera recursiva desde la raíz."""
+        parent = self.get_parent(node)
+        if parent is None:
             return None
-        return node.parent.parent
+        return self.get_parent(parent)
 
     def get_uncle(self, node):
-        if node is None or node.parent is None or node.parent.parent is None:
+        """Encuentra el tío del nodo de manera recursiva desde la raíz."""
+        parent = self.get_parent(node)
+        if parent is None:
             return None
-
-        grandparent = node.parent.parent
-        parent = node.parent
-
-        if grandparent.left == parent:
+        grandparent = self.get_parent(parent)
+        if grandparent is None:
+            return None
+        if grandparent.left is parent:
             return grandparent.right
-        else:
-            return grandparent.left
+        return grandparent.left
+
+    # =========================
+    # REBALANCEO MANUAL
+    # =========================
+    def rebalance(self):
+        """Reconstruye el árbol como un BST perfectamente balanceado
+        usando el recorrido inorder existente (ordenado por satisfacción).
+        """
+        if self.root is None:
+            return False
+
+        # 1. Obtener todos los nodos ordenados por satisfacción (inorder)
+        nodos_ordenados = []
+        self.__inorder_collect(self.root, nodos_ordenados)
+
+        # 2. Reconstruir el árbol balanceado
+        self.root = self.__build_balanced(nodos_ordenados, 0, len(nodos_ordenados) - 1, None)
+        return True
+
+    def __inorder_collect(self, node, resultado):
+        """Recorre el árbol en inorder y acumula los nodos."""
+        if node is None:
+            return
+        self.__inorder_collect(node.left, resultado)
+        resultado.append(node)
+        self.__inorder_collect(node.right, resultado)
+
+    def __build_balanced(self, nodos, inicio, fin, parent):
+        """Construye recursivamente un BST balanceado a partir de
+        una lista ordenada de nodos.
+        """
+        if inicio > fin:
+            return None
+        mid = (inicio + fin) // 2
+        nodo = nodos[mid]
+        nodo.parent = parent
+        nodo.left = self.__build_balanced(nodos, inicio, mid - 1, nodo)
+        nodo.right = self.__build_balanced(nodos, mid + 1, fin, nodo)
+        return nodo
 
     # =========================
     # BÚSQUEDAS DIRECTAS
@@ -466,54 +523,6 @@ class Arbol:
 
     def find_by_satisfaction(self, satisfaction_level):
         return self.__find_by_satisfaction(self.root, satisfaction_level)
-    
-    
-    # =========================
-    # BALANCEO DEL ÁRBOL
-    # =========================
-    def rebalance(self):
-        """
-        Reconstruye el árbol de forma balanceada a partir de los nodos
-        ordenados por satisfacción (recorrido inorden).
-        """
-        if self.root is None:
-            return False
-
-        nodos_ordenados = []
-        self.__inorder_collect(self.root, nodos_ordenados)
-
-        self.root = self.__build_balanced_tree(nodos_ordenados, 0, len(nodos_ordenados) - 1, None)
-        self.all_nodes = nodos_ordenados
-        return True
-
-    def __inorder_collect(self, node, result):
-        if node is None:
-            return
-
-        left_child = node.left
-        right_child = node.right
-
-        self.__inorder_collect(left_child, result)
-
-        node.left = None
-        node.right = None
-        node.parent = None
-        result.append(node)
-
-        self.__inorder_collect(right_child, result)
-
-    def __build_balanced_tree(self, nodes, start, end, parent=None):
-        if start > end:
-            return None
-
-        mid = (start + end) // 2
-        root = nodes[mid]
-        root.parent = parent
-
-        root.left = self.__build_balanced_tree(nodes, start, mid - 1, root)
-        root.right = self.__build_balanced_tree(nodes, mid + 1, end, root)
-
-        return root
 
     # =========================
     # APOYO PARA GUI

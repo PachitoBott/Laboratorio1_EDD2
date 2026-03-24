@@ -9,10 +9,16 @@ from graphviz import Digraph
 import Arbol
 
 
-# Asegura que Python vea Graphviz en Windows
+# Asegurar que Graphviz funciona si está instalado pero no en el PATH de la terminal actual
+import os
+import shutil
+
 graphviz_bin = r"C:\Program Files\Graphviz\bin"
-if shutil.which("dot") is None and os.path.exists(graphviz_bin):
-    os.environ["PATH"] = graphviz_bin + os.pathsep + os.environ.get("PATH", "")
+if shutil.which("dot") is None:
+    if os.path.exists(graphviz_bin):
+        os.environ["PATH"] += os.pathsep + graphviz_bin
+    elif os.path.exists(r"C:\Program Files (x86)\Graphviz\bin"):
+        os.environ["PATH"] += os.pathsep + r"C:\Program Files (x86)\Graphviz\bin"
 
 
 class ModernButton(tk.Button):
@@ -192,13 +198,7 @@ class InterfazArbol:
             bg=self.colors["bg_card"]
         ).pack(anchor="w")
 
-        tk.Label(
-            title_frame,
-            text="Visualizador y gestor interactivo de cursos basado en nivel de satisfacción",
-            font=self.fonts["text"],
-            fg=self.colors["muted"],
-            bg=self.colors["bg_card"]
-        ).pack(anchor="w", pady=(4, 0))
+
 
     def _crear_sidebar(self):
         # Canvas + scroll del panel lateral
@@ -231,14 +231,7 @@ class InterfazArbol:
             bg=self.colors["bg_panel"]
         ).pack(anchor="w", padx=16, pady=(16, 4))
 
-        tk.Label(
-            self.sidebar_content,
-            text="Gestiona el árbol, ejecuta búsquedas y consulta resultados.",
-            font=self.fonts["text_small"],
-            fg=self.colors["muted"],
-            bg=self.colors["bg_panel"],
-            justify="left"
-        ).pack(anchor="w", padx=16, pady=(0, 14))
+
 
         # Tarjeta: Operaciones
         ops_card = self._crear_card(self.sidebar_content, "Operaciones del árbol")
@@ -323,14 +316,7 @@ class InterfazArbol:
             font=self.fonts["button"]
         ).pack(fill="x", pady=4)
 
-        ModernButton(
-            btn_container,
-            text="Balancear árbol",
-            command=self.balancear_arbol,
-            bg=self.colors["orange"],
-            hover_bg=self.colors["orange_hover"],
-            font=self.fonts["button"]
-        ).pack(fill="x", pady=(8, 4))
+
 
         ModernButton(
             btn_container,
@@ -554,13 +540,7 @@ class InterfazArbol:
             bg=self.colors["bg_main"]
         ).pack(side="left")
 
-        tk.Label(
-            vis_header,
-            text="Vista generada con Graphviz",
-            font=self.fonts["text_small"],
-            fg=self.colors["muted"],
-            bg=self.colors["bg_main"]
-        ).pack(side="left", padx=12, pady=(4, 0))
+
 
         # Tarjeta de visualización
         visual_card = tk.Frame(
@@ -570,24 +550,11 @@ class InterfazArbol:
             highlightthickness=1
         )
         visual_card.grid(row=1, column=0, sticky="nsew")
-        visual_card.grid_rowconfigure(1, weight=1)
+        visual_card.grid_rowconfigure(0, weight=1)
         visual_card.grid_columnconfigure(0, weight=1)
-
-        card_top = tk.Frame(visual_card, bg=self.colors["bg_card"])
-        card_top.grid(row=0, column=0, sticky="ew", padx=16, pady=(14, 8))
-
-        self.tree_status_label = tk.Label(
-            card_top,
-            text="Árbol listo para visualizar",
-            font=self.fonts["text"],
-            fg=self.colors["muted"],
-            bg=self.colors["bg_card"]
-        )
-        self.tree_status_label.pack(anchor="w")
-
         # Canvas con scroll
         tree_frame = tk.Frame(visual_card, bg=self.colors["bg_card_alt"])
-        tree_frame.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 16))
+        tree_frame.grid(row=0, column=0, sticky="nsew", padx=4, pady=4)
 
         self.tree_canvas = tk.Canvas(
             tree_frame,
@@ -623,13 +590,7 @@ class InterfazArbol:
             bg=self.colors["bg_card"]
         ).pack(side="left")
 
-        tk.Label(
-            top,
-            text="Mensajes del sistema, búsquedas y operaciones ejecutadas",
-            font=self.fonts["text_small"],
-            fg=self.colors["muted"],
-            bg=self.colors["bg_card"]
-        ).pack(side="left", padx=12, pady=(3, 0))
+
 
         self.txt_salida = ScrolledText(
             self.bottom_area,
@@ -730,7 +691,7 @@ class InterfazArbol:
             salida = [
                 "[INFO] Nodo encontrado:",
                 f"ID: {node.data[0]}",
-                f"Satisfacción: {node.data[1]:.4f}",
+                f"Satisfacción: {node.data[1]:.5f}",
                 f"Nivel: {self.arbol.get_node_level(node)}",
                 f"Factor de balanceo: {self.arbol.get_balance_factor(node)}"
             ]
@@ -843,14 +804,127 @@ class InterfazArbol:
             self._escribir(f"[INFO] {titulo}\nNo se encontraron nodos.", "info")
             return
 
-        self.highlighted_node_id = resultados[0].data[0] if resultados else None
-
         lineas = [f"[INFO] {titulo}", f"Total encontrados: {len(resultados)}"]
         for i, node in enumerate(resultados, start=1):
-            lineas.append(f"{i}. ID: {node.data[0]} | Satisfacción: {node.data[1]:.4f}")
+            lineas.append(f"{i}. ID: {node.data[0]} | Satisfacción: {node.data[1]:.5f}")
+        lineas.append("\nEscribe el número del nodo para ver sus detalles, o deja vacío para omitir.")
 
         self._escribir("\n".join(lineas), "info")
         self._actualizar_vista_arbol()
+
+        # Ventana de selección
+        self._abrir_ventana_seleccion(titulo, resultados)
+
+    def _abrir_ventana_seleccion(self, titulo, resultados):
+        """Abre una ventana con la lista de nodos encontrados para que el
+        usuario seleccione uno y realice operaciones sobre él."""
+        import tkinter as tk
+
+        ventana = tk.Toplevel(self.root)
+        ventana.title("Seleccionar nodo")
+        ventana.geometry("520x520")
+        ventana.configure(bg="#F5F7FA")
+        ventana.grab_set()
+
+        tk.Label(ventana, text=titulo, font=("Segoe UI", 12, "bold"),
+                 bg="#F5F7FA", fg="#1F2937").pack(padx=16, pady=(16, 4))
+        tk.Label(ventana, text="Selecciona un nodo para ver sus propiedades:",
+                 font=("Segoe UI", 10), bg="#F5F7FA", fg="#6B7280").pack(padx=16)
+
+        frame_lista = tk.Frame(ventana, bg="#F5F7FA")
+        frame_lista.pack(fill="both", expand=True, padx=16, pady=8)
+
+        scrollbar = tk.Scrollbar(frame_lista)
+        scrollbar.pack(side="right", fill="y")
+
+        listbox = tk.Listbox(frame_lista, font=("Consolas", 10),
+                             bg="white", fg="#1F2937",
+                             selectbackground="#3B82F6", selectforeground="white",
+                             yscrollcommand=scrollbar.set, relief="flat",
+                             highlightthickness=1, highlightbackground="#D7DEE8")
+        listbox.pack(side="left", fill="both", expand=True)
+        scrollbar.config(command=listbox.yview)
+
+        for i, node in enumerate(resultados, start=1):
+            listbox.insert("end", f"{i:>3}. ID: {node.data[0]}  |  Sat: {node.data[1]:.5f}")
+
+        def seleccionar():
+            seleccion = listbox.curselection()
+            if not seleccion:
+                return
+            idx = seleccion[0]
+            nodo_sel = resultados[idx]
+            nid = nodo_sel.data[0]
+            self.highlighted_node_id = nid
+            self.selected_node_id = nid
+            self._actualizar_vista_arbol()
+            self._mostrar_propiedades_nodo(nodo_sel)
+            ventana.destroy()
+
+        ModernButton(ventana, text="Ver propiedades del nodo seleccionado",
+                     command=seleccionar).pack(fill="x", padx=16, pady=(0, 8))
+        ModernButton(ventana, text="Cerrar", command=ventana.destroy,
+                     bg="#CBD5E1", hover_bg="#94A3B8", fg="#1F2937",
+                     active_fg="white").pack(fill="x", padx=16, pady=(0, 16))
+
+    def _mostrar_propiedades_nodo(self, node):
+        """Muestra un panel completo de propiedades de un nodo seleccionado."""
+        import tkinter as tk
+
+        nid = node.data[0]
+        ventana = tk.Toplevel(self.root)
+        ventana.title(f"Propiedades del nodo ID {nid}")
+        ventana.geometry("480x520")
+        ventana.configure(bg="#F5F7FA")
+        ventana.grab_set()
+
+        # Datos del árbol
+        nivel = self.arbol.get_node_level(node)
+        balance = self.arbol.get_balance_factor(node)
+        padre = self.arbol.get_parent(node)
+        abuelo = self.arbol.get_grandparent(node)
+        tio = self.arbol.get_uncle(node)
+        info = self.arbol.get_course_full_info(nid)
+
+        from tkinter.scrolledtext import ScrolledText
+        txt = ScrolledText(ventana, font=("Consolas", 10), bg="white",
+                           fg="#1F2937", relief="flat", padx=14, pady=12,
+                           highlightthickness=1, highlightbackground="#D7DEE8")
+        txt.pack(fill="both", expand=True, padx=16, pady=16)
+
+        lineas = [
+            f"=== PROPIEDADES DEL NODO ===",
+            f"ID:                {nid}",
+            f"Satisfacción:      {node.data[1]:.5f}",
+            f"Nivel en el árbol: {nivel}",
+            f"Factor de balance: {balance}",
+            f"Padre:             {padre.data[0] if padre else 'No tiene (es raíz)'}",
+            f"Abuelo:            {abuelo.data[0] if abuelo else 'No tiene'}",
+            f"Tío:               {tio.data[0] if tio else 'No tiene'}",
+        ]
+
+        if info:
+            lineas += [
+                "",
+                "=== INFORMACIÓN COMPLETA DEL CURSO ===",
+                f"Título:    {info.get('title', 'N/A')}",
+                f"Rating:    {info.get('rating', 'N/A')}",
+                f"Reviews:   {info.get('num_reviews', 'N/A')}",
+                f"Clases:    {info.get('num_published_lectures', 'N/A')}",
+                f"Creado:    {info.get('created', 'N/A')}",
+                f"Actualiz.: {info.get('last_update_date', 'N/A')}",
+                f"Duración:  {info.get('duration', 'N/A')}",
+                f"Positivas: {info.get('positive_reviews', 'N/A')}",
+                f"Negativas: {info.get('negative_reviews', 'N/A')}",
+                f"Neutras:   {info.get('neutral_reviews', 'N/A')}",
+            ]
+
+        txt.insert("end", "\n".join(lineas))
+        txt.configure(state="disabled")
+
+        ModernButton(ventana, text="Cerrar", command=ventana.destroy,
+                     bg="#CBD5E1", hover_bg="#94A3B8", fg="#1F2937",
+                     active_fg="white").pack(fill="x", padx=16, pady=(0, 16))
 
     def _escribir(self, texto, tipo="info"):
         self.txt_salida.insert("end", texto + "\n", tipo)
@@ -873,8 +947,7 @@ class InterfazArbol:
                 fill=self.colors["muted"],
                 font=("Segoe UI", 18, "bold")
             )
-            self.tree_canvas.configure(scrollregion=(0, 0, 800, 440))
-            self.tree_status_label.configure(text="No hay nodos cargados actualmente.")
+            self.tree_canvas.configure(scrollregion=(0, 0, 800, 800))
             return
 
         try:
@@ -890,9 +963,6 @@ class InterfazArbol:
             self._centrar_imagen_arbol()
 
             total_nodes = len(self.arbol.all_nodes) if hasattr(self.arbol, "all_nodes") else "?"
-            self.tree_status_label.configure(
-                text=f"Árbol generado correctamente. Nodos cargados: {total_nodes}"
-            )
         except Exception as e:
             self.tree_canvas.delete("all")
             self.tree_canvas.create_text(
@@ -902,8 +972,7 @@ class InterfazArbol:
                 font=("Segoe UI", 12, "bold"),
                 justify="center"
             )
-            self.tree_canvas.configure(scrollregion=(0, 0, 900, 440))
-            self.tree_status_label.configure(text="Error al generar la visualización.")
+            self.tree_canvas.configure(scrollregion=(0, 0, 900, 800))
 
     def _centrar_imagen_arbol(self, _event=None):
         if self.tree_image is None:
@@ -923,8 +992,9 @@ class InterfazArbol:
 
     def _generar_imagen_graphviz(self):
         dot = Digraph(comment="Árbol Binario de Búsqueda")
-        dot.attr(rankdir='TB', splines='true', nodesep='0.55', ranksep='0.7')
+        dot.attr(rankdir='TB', splines='true', nodesep='0.3', ranksep='0.5')
         dot.attr(bgcolor="transparent")
+        dot.attr('graph', dpi='90')
 
         self._agregar_nodos_y_aristas(dot, self.arbol.root, is_root=True)
 
@@ -960,20 +1030,30 @@ class InterfazArbol:
             border = "#D97706"
             penwidth = "2.3"
 
-        etiqueta = f"ID: {nodo.data[0]}\\nSat: {nodo.data[1]:.2f}"
+        # Obtener titulo del curso
+        try:
+            info = self.arbol.get_course_full_info(nodo.data[0])
+            titulo = info['title'] if info and info.get('title') else ""
+        except Exception:
+            titulo = ""
+
+        if titulo:
+            etiqueta = f"{titulo}\\nID: {nodo.data[0]}\\nSat: {nodo.data[1]:.5f}"
+        else:
+            etiqueta = f"ID: {nodo.data[0]}\\nSat: {nodo.data[1]:.5f}"
 
         dot.node(
             nombre_nodo,
             etiqueta,
-            shape="circle",
-            style="filled",
+            shape="box",
+            style="filled,rounded",
             fillcolor=fill,
             color=border,
             fontcolor=font_color,
-            fontname="Segoe UI",
-            fontsize="11",
+            fontname="Arial",
+            fontsize="9",
             penwidth=penwidth,
-            margin="0.12"
+            margin="0.06"
         )
 
         if nodo.left:
